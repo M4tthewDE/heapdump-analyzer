@@ -66,6 +66,13 @@ pub enum Record {
         id: u64,
         content: String,
     },
+    LoadClass {
+        micros: u32,
+        class_serial_number: u32,
+        class_object_id: u64,
+        stack_trace_serial_number: u32,
+        class_name_id: u64,
+    },
     HeapDumpEnd,
 }
 
@@ -77,6 +84,7 @@ impl Record {
 
         match tag {
             1 => Ok(Self::utf8(file, micros, bytes_remaining)?),
+            2 => Ok(Self::load_class(file, micros)?),
             _ => Err(anyhow!("invalid tag: {}", tag)),
         }
     }
@@ -88,6 +96,16 @@ impl Record {
             micros,
             id,
             content,
+        })
+    }
+
+    fn load_class(file: &mut File, micros: u32) -> Result<Self> {
+        Ok(Self::LoadClass {
+            micros,
+            class_serial_number: read_u32(file)?,
+            class_object_id: read_u64(file)?,
+            stack_trace_serial_number: read_u32(file)?,
+            class_name_id: read_u64(file)?,
         })
     }
 }
