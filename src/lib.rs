@@ -20,7 +20,6 @@ impl Version {
 #[derive(Debug)]
 pub struct Heap {
     pub version: Version,
-    pub identifier_size: u32,
     pub timestamp: DateTime<Utc>,
     pub records: Vec<Record>,
 }
@@ -35,13 +34,17 @@ pub fn parse(path: &Path) -> Result<Heap> {
 
     let identifier_size = read_u32(&mut file)?;
 
+    if identifier_size != 8 {
+        bail!("only 64bit heapdumps supported");
+    }
+
     let timestamp = DateTime::from_timestamp_millis(read_u64(&mut file)? as i64)
         .context("invalid timestamp")?;
 
     let mut records = Vec::new();
     loop {
         let record = Record::parse(&mut file)?;
-        if matches!(record.tag, Tag::HeapDumpEnd) {
+        if matches!(record, Record::HeapDumpEnd) {
             records.push(record);
             break;
         }
@@ -51,43 +54,68 @@ pub fn parse(path: &Path) -> Result<Heap> {
 
     Ok(Heap {
         version: Version::new(&version)?,
-        identifier_size,
         timestamp,
         records,
     })
 }
-#[derive(Debug, Clone)]
-pub enum Tag {
-    Utf8,
-    HeapDumpEnd,
-}
-
-impl Tag {
-    fn new(byte: u8) -> Result<Tag> {
-        match byte {
-            1 => Ok(Self::Utf8),
-            _ => Err(anyhow!("invalid tag: {}", byte)),
-        }
-    }
-}
 
 #[derive(Debug)]
-pub struct Record {
-    pub tag: Tag,
+pub enum Record {
+    Utf8 {
+        micros: u32,
+        id: u64,
+        content: String,
+    },
+    HeapDumpEnd,
 }
 
 impl Record {
     fn parse(file: &mut File) -> Result<Record> {
-        let tag = Tag::new(read_u8(file)?)?;
+        let tag = read_u8(file)?;
+        let micros = read_u32(file)?;
+        let bytes_remaining = read_u32(file)? as usize;
 
-        bail!("not implemented {:?}", tag)
+        match tag {
+            1 => Ok(Self::utf8(file, micros, bytes_remaining)?),
+            _ => Err(anyhow!("invalid tag: {}", tag)),
+        }
+    }
+
+    fn utf8(file: &mut File, micros: u32, bytes_remaining: usize) -> Result<Self> {
+        let id = read_u64(file)?;
+        let content = read_utf8(file, bytes_remaining - 8)?;
+        Ok(Self::Utf8 {
+            micros,
+            id,
+            content,
+        })
     }
 }
 
 fn read_utf8(r: &mut impl Read, size: usize) -> Result<String> {
     let mut buf = vec![0; size];
     r.read_exact(&mut buf)?;
-    Ok(String::from_utf8(buf.to_vec())?)
+
+    // fix java uf8 quirks
+    let mut fixed_buf = Vec::new();
+    let mut i = 0;
+    loop {
+        if i == size {
+            break;
+        }
+
+        let b = buf[i];
+        if b == 0xC0 && i < buf.len() - 1 && buf[i + 1] == 0x80 {
+            fixed_buf.push(0);
+            i += 1;
+        } else {
+            fixed_buf.push(b);
+        }
+
+        i += 1;
+    }
+
+    Ok(String::from_utf8(fixed_buf.to_vec())?)
 }
 
 fn read_u8(r: &mut impl Read) -> Result<u8> {
