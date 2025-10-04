@@ -73,6 +73,21 @@ pub enum Record {
         stack_trace_serial_number: u32,
         class_name_id: u64,
     },
+    Trace {
+        micros: u32,
+        stack_trace_serial_number: u32,
+        thread_serial_number: u32,
+        stack_frame_ids: Vec<u64>,
+    },
+    Frame {
+        micros: u32,
+        stack_frame_id: u64,
+        method_name_id: u64,
+        method_signature_id: u64,
+        source_file_name_id: u64,
+        class_serial_number: u32,
+        line_number: i32,
+    },
     HeapDumpEnd,
 }
 
@@ -85,6 +100,8 @@ impl Record {
         match tag {
             1 => Ok(Self::utf8(file, micros, bytes_remaining)?),
             2 => Ok(Self::load_class(file, micros)?),
+            4 => Ok(Self::frame(file, micros)?),
+            5 => Ok(Self::trace(file, micros)?),
             _ => Err(anyhow!("invalid tag: {}", tag)),
         }
     }
@@ -106,6 +123,43 @@ impl Record {
             class_object_id: read_u64(file)?,
             stack_trace_serial_number: read_u32(file)?,
             class_name_id: read_u64(file)?,
+        })
+    }
+
+    fn trace(file: &mut File, micros: u32) -> Result<Self> {
+        let stack_trace_serial_number = read_u32(file)?;
+        let thread_serial_number = read_u32(file)?;
+        let number_of_frames = read_u32(file)?;
+
+        let mut stack_frame_ids = Vec::new();
+        for _ in 0..number_of_frames {
+            stack_frame_ids.push(read_u64(file)?);
+        }
+
+        Ok(Self::Trace {
+            micros,
+            stack_trace_serial_number,
+            thread_serial_number,
+            stack_frame_ids,
+        })
+    }
+
+    fn frame(file: &mut File, micros: u32) -> Result<Self> {
+        let stack_frame_id = read_u64(file)?;
+        let method_name_id = read_u64(file)?;
+        let method_signature_id = read_u64(file)?;
+        let source_file_name_id = read_u64(file)?;
+        let class_serial_number = read_u32(file)?;
+        let line_number = read_i32(file)?;
+
+        Ok(Self::Frame {
+            micros,
+            stack_frame_id,
+            method_name_id,
+            method_signature_id,
+            source_file_name_id,
+            class_serial_number,
+            line_number,
         })
     }
 }
@@ -134,6 +188,12 @@ fn read_utf8(r: &mut impl Read, size: usize) -> Result<String> {
     }
 
     Ok(String::from_utf8(fixed_buf.to_vec())?)
+}
+
+fn read_i32(r: &mut impl Read) -> Result<i32> {
+    let mut buf = [0; 4];
+    r.read_exact(&mut buf)?;
+    Ok(i32::from_be_bytes(buf))
 }
 
 fn read_u8(r: &mut impl Read) -> Result<u8> {
