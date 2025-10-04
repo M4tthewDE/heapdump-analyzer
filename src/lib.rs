@@ -28,23 +28,15 @@ pub struct Heap {
 pub fn parse(path: &Path) -> Result<Heap> {
     let mut file = File::open(path)?;
 
-    let mut version_buf = [0; 18];
-    file.read_exact(&mut version_buf)?;
-
-    let version_str = String::from_utf8(version_buf.to_vec())?;
+    let version = read_utf8(&mut file, 18)?;
 
     // skip 0-byte
-    file.read(&mut [0; 1])?;
+    read_u8(&mut file)?;
 
-    let mut identifier_size_buf = [0; 4];
-    file.read_exact(&mut identifier_size_buf)?;
-    let identifier_size = u32::from_be_bytes(identifier_size_buf);
+    let identifier_size = read_u32(&mut file)?;
 
-    let mut timestamp_buf = [0; 8];
-    file.read_exact(&mut timestamp_buf)?;
-    let timestamp = u64::from_be_bytes(timestamp_buf);
-    let timestamp =
-        DateTime::from_timestamp_millis(timestamp as i64).context("invalid timestamp")?;
+    let timestamp = DateTime::from_timestamp_millis(read_u64(&mut file)? as i64)
+        .context("invalid timestamp")?;
 
     let mut records = Vec::new();
     loop {
@@ -58,7 +50,7 @@ pub fn parse(path: &Path) -> Result<Heap> {
     }
 
     Ok(Heap {
-        version: Version::new(&version_str)?,
+        version: Version::new(&version)?,
         identifier_size,
         timestamp,
         records,
@@ -86,11 +78,32 @@ pub struct Record {
 
 impl Record {
     fn parse(file: &mut File) -> Result<Record> {
-        let mut tag_buf = [0; 1];
-        file.read(&mut tag_buf)?;
-
-        let tag = Tag::new(tag_buf[0])?;
+        let tag = Tag::new(read_u8(file)?)?;
 
         bail!("not implemented {:?}", tag)
     }
+}
+
+fn read_utf8(r: &mut impl Read, size: usize) -> Result<String> {
+    let mut buf = vec![0; size];
+    r.read_exact(&mut buf)?;
+    Ok(String::from_utf8(buf.to_vec())?)
+}
+
+fn read_u8(r: &mut impl Read) -> Result<u8> {
+    let mut buf = [0; 1];
+    r.read_exact(&mut buf)?;
+    Ok(buf[0])
+}
+
+fn read_u32(r: &mut impl Read) -> Result<u32> {
+    let mut buf = [0; 4];
+    r.read_exact(&mut buf)?;
+    Ok(u32::from_be_bytes(buf))
+}
+
+fn read_u64(r: &mut impl Read) -> Result<u64> {
+    let mut buf = [0; 8];
+    r.read_exact(&mut buf)?;
+    Ok(u64::from_be_bytes(buf))
 }
