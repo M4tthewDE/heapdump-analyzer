@@ -43,19 +43,8 @@ pub struct AnalyzedHeap {
 
 impl AnalyzedHeap {
     pub fn analyze(parsed_heap: &ParsedHeap) -> Result<Self> {
-        let mut strings = HashMap::new();
+        let strings = Self::strings(parsed_heap);
         let mut classes = HashMap::new();
-
-        for record in &parsed_heap.records {
-            match record {
-                Record::Utf8 {
-                    name_id, content, ..
-                } => {
-                    strings.insert(*name_id, content.to_string());
-                }
-                _ => {}
-            }
-        }
 
         let mut frames = Vec::new();
         let mut instances = HashMap::new();
@@ -136,5 +125,20 @@ impl AnalyzedHeap {
             classes,
             instances,
         })
+    }
+
+    fn strings(parsed_heap: &ParsedHeap) -> HashMap<Id, String> {
+        let mut strings = HashMap::new();
+
+        for record in &parsed_heap.records {
+            if let Record::Utf8 {
+                name_id, content, ..
+            } = record
+            {
+                strings.insert(*name_id, content.to_string());
+            }
+        }
+
+        strings
     }
 }
