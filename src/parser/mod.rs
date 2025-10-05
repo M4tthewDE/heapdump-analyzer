@@ -2,8 +2,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
 use std::{
     fmt::Display,
-    fs::File,
-    io::{Read, Seek},
+    io::{Cursor, Read, Seek},
     path::Path,
 };
 
@@ -39,25 +38,26 @@ pub struct ParsedHeap {
 
 impl ParsedHeap {
     pub fn parse(path: &Path) -> Result<Self> {
-        let mut file = File::open(path)?;
+        let contents = std::fs::read(path)?;
+        let mut cursor = Cursor::new(contents);
 
-        let version = read_utf8(&mut file, 18)?;
+        let version = read_utf8(&mut cursor, 18)?;
 
         // skip 0-byte
-        read_u8(&mut file)?;
+        read_u8(&mut cursor)?;
 
-        let identifier_size = read_u32(&mut file)?;
+        let identifier_size = read_u32(&mut cursor)?;
 
         if identifier_size != 8 {
             bail!("only 64bit heapdumps supported");
         }
 
-        let timestamp = DateTime::from_timestamp_millis(read_u64(&mut file)? as i64)
+        let timestamp = DateTime::from_timestamp_millis(read_u64(&mut cursor)? as i64)
             .context("invalid timestamp")?;
 
         let mut records = Vec::new();
         loop {
-            let record = Record::parse(&mut file)?;
+            let record = Record::parse(&mut cursor)?;
 
             if matches!(record, Record::HeapDumpEnd { .. }) {
                 records.push(record);

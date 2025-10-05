@@ -5,7 +5,7 @@ use crate::parser::ParsedHeap;
 pub struct AnalyzedHeap {}
 
 impl AnalyzedHeap {
-    pub fn analyze(parsed_heap: &ParsedHeap) -> Result<Self> {
+    pub fn analyze(_parsed_heap: &ParsedHeap) -> Result<Self> {
         bail!("not implemented: analzye")
     }
 }
