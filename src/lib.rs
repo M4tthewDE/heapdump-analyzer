@@ -323,6 +323,10 @@ pub enum SubRecord {
         thread_serial_number: u32,
         frame_number: u32,
     },
+    JniGlobal {
+        object_id: u64,
+        global_ref_id: u64,
+    },
     HeapDumpEnd,
 }
 
@@ -336,6 +340,7 @@ impl Display for SubRecord {
             SubRecord::ThreadObj { .. } => write!(f, "ThreadObj"),
             SubRecord::JavaFrame { .. } => write!(f, "JavaFrame"),
             SubRecord::JniLocal { .. } => write!(f, "JniLocal"),
+            SubRecord::JniGlobal { .. } => write!(f, "JniGlobal"),
             SubRecord::HeapDumpEnd => write!(f, "HeapDumpEnd"),
         }
     }
@@ -346,6 +351,7 @@ impl SubRecord {
         let sub_record_type = read_u8(file)?;
 
         match sub_record_type {
+            0x01 => Self::jni_global(file),
             0x02 => Self::jni_local(file),
             0x03 => Self::java_frame(file),
             0x08 => Self::thread_obj(file),
@@ -489,6 +495,13 @@ impl SubRecord {
             object_id: read_u64(file)?,
             thread_serial_number: read_u32(file)?,
             frame_number: read_u32(file)?,
+        })
+    }
+
+    fn jni_global(file: &mut File) -> Result<Self> {
+        Ok(Self::JniGlobal {
+            object_id: read_u64(file)?,
+            global_ref_id: read_u64(file)?,
         })
     }
 }
