@@ -76,31 +76,40 @@ impl ParsedHeap {
 }
 
 #[derive(Debug)]
+pub struct Id(pub u64);
+
+impl From<u64> for Id {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug)]
 pub enum Record {
     Utf8 {
         micros: u32,
-        id: u64,
+        name_id: Id,
         content: String,
     },
     LoadClass {
         micros: u32,
         class_serial_number: u32,
-        class_object_id: u64,
+        class_object_id: Id,
         stack_trace_serial_number: u32,
-        class_name_id: u64,
+        class_name_id: Id,
     },
     Trace {
         micros: u32,
         stack_trace_serial_number: u32,
         thread_serial_number: u32,
-        stack_frame_ids: Vec<u64>,
+        stack_frame_ids: Vec<Id>,
     },
     Frame {
         micros: u32,
-        stack_frame_id: u64,
-        method_name_id: u64,
-        method_signature_id: u64,
-        source_file_name_id: u64,
+        stack_frame_id: Id,
+        method_name_id: Id,
+        method_signature_id: Id,
+        source_file_name_id: Id,
         class_serial_number: u32,
         line_number: i32,
     },
@@ -144,11 +153,11 @@ impl Record {
     }
 
     fn utf8(r: &mut impl Read, micros: u32, bytes_remaining: usize) -> Result<Self> {
-        let id = read_u64(r)?;
+        let name_id = read_u64(r)?.into();
         let content = read_utf8(r, bytes_remaining - 8)?;
         Ok(Self::Utf8 {
             micros,
-            id,
+            name_id,
             content,
         })
     }
@@ -157,9 +166,9 @@ impl Record {
         Ok(Self::LoadClass {
             micros,
             class_serial_number: read_u32(r)?,
-            class_object_id: read_u64(r)?,
+            class_object_id: read_u64(r)?.into(),
             stack_trace_serial_number: read_u32(r)?,
-            class_name_id: read_u64(r)?,
+            class_name_id: read_u64(r)?.into(),
         })
     }
 
@@ -170,7 +179,7 @@ impl Record {
 
         let mut stack_frame_ids = Vec::new();
         for _ in 0..number_of_frames {
-            stack_frame_ids.push(read_u64(r)?);
+            stack_frame_ids.push(read_u64(r)?.into());
         }
 
         Ok(Self::Trace {
@@ -182,10 +191,10 @@ impl Record {
     }
 
     fn frame(r: &mut impl Read, micros: u32) -> Result<Self> {
-        let stack_frame_id = read_u64(r)?;
-        let method_name_id = read_u64(r)?;
-        let method_signature_id = read_u64(r)?;
-        let source_file_name_id = read_u64(r)?;
+        let stack_frame_id = read_u64(r)?.into();
+        let method_name_id = read_u64(r)?.into();
+        let method_signature_id = read_u64(r)?.into();
+        let source_file_name_id = read_u64(r)?.into();
         let class_serial_number = read_u32(r)?;
         let line_number = read_i32(r)?;
 

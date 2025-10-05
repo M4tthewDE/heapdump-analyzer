@@ -2,11 +2,14 @@ use std::{fmt::Display, io::Read};
 
 use anyhow::{Result, bail};
 
-use crate::parser::util::{read_u8, read_u16, read_u32, read_u64};
+use crate::parser::{
+    Id,
+    util::{read_u8, read_u16, read_u32, read_u64},
+};
 
 #[derive(Debug)]
 pub enum FieldValue {
-    NormalObject { object_id: u64 },
+    NormalObject { object_id: Id },
     Boolean(u8),
     Char(u16),
     Float(u32),
@@ -19,18 +22,18 @@ pub enum FieldValue {
 
 #[derive(Debug)]
 pub struct Field {
-    pub name_id: u64,
+    pub name_id: Id,
     pub value: FieldValue,
 }
 
 impl Field {
     fn new(r: &mut impl Read) -> Result<Self> {
-        let name_id = read_u64(r)?;
+        let name_id = read_u64(r)?.into();
         let typ = read_u8(r)?;
 
         let value = match typ {
             0x02 => FieldValue::NormalObject {
-                object_id: read_u64(r)?,
+                object_id: read_u64(r)?.into(),
             },
             0x04 => FieldValue::Boolean(read_u8(r)?),
             0x05 => FieldValue::Char(read_u16(r)?),
@@ -49,7 +52,7 @@ impl Field {
 
 #[derive(Debug)]
 pub struct FieldDescriptor {
-    pub name_id: u64,
+    pub name_id: Id,
     pub typ: u8,
 }
 
@@ -68,12 +71,12 @@ pub enum PrimArrayElement {
 #[derive(Debug)]
 pub enum SubRecord {
     ClassDump {
-        class_object_id: u64,
+        class_object_id: Id,
         stack_trace_serial_number: u32,
-        super_class_object_id: u64,
-        class_loader_object_id: u64,
-        signers_object_id: u64,
-        protection_domain_object_id: u64,
+        super_class_object_id: Id,
+        class_loader_object_id: Id,
+        signers_object_id: Id,
+        protection_domain_object_id: Id,
         reserved1: u64,
         reserved2: u64,
         instance_size: u32,
@@ -84,45 +87,45 @@ pub enum SubRecord {
         instance_field_descriptors: Vec<FieldDescriptor>,
     },
     InstanceDump {
-        object_id: u64,
+        object_id: Id,
         stack_trace_serial_number: u32,
-        class_object_id: u64,
+        class_object_id: Id,
         number_of_bytes: u32,
         raw_field_bytes: Vec<u8>,
     },
     ObjArrayDump {
-        object_id: u64,
+        object_id: Id,
         stack_trace_serial_number: u32,
-        array_class_id: u64,
-        elements: Vec<u64>,
+        array_class_id: Id,
+        elements: Vec<Id>,
     },
     PrimArrayDump {
-        object_id: u64,
+        object_id: Id,
         stack_trace_serial_number: u32,
         typ: u8,
         elements: Vec<PrimArrayElement>,
     },
     ThreadObj {
-        object_id: u64,
+        object_id: Id,
         sequence_number: u32,
         stack_trace_sequence_number: u32,
     },
     JavaFrame {
-        object_id: u64,
+        object_id: Id,
         thread_serial_number: u32,
         frame_number: u32,
     },
     JniLocal {
-        object_id: u64,
+        object_id: Id,
         thread_serial_number: u32,
         frame_number: u32,
     },
     JniGlobal {
-        object_id: u64,
-        global_ref_id: u64,
+        object_id: Id,
+        global_ref_id: Id,
     },
     StickyClass {
-        object_id: u64,
+        object_id: Id,
     },
     HeapDumpEnd,
 }
@@ -163,12 +166,12 @@ impl SubRecord {
     }
 
     fn class_dump(r: &mut impl Read) -> Result<Self> {
-        let class_object_id = read_u64(r)?;
+        let class_object_id = read_u64(r)?.into();
         let stack_trace_serial_number = read_u32(r)?;
-        let super_class_object_id = read_u64(r)?;
-        let class_loader_object_id = read_u64(r)?;
-        let signers_object_id = read_u64(r)?;
-        let protection_domain_object_id = read_u64(r)?;
+        let super_class_object_id = read_u64(r)?.into();
+        let class_loader_object_id = read_u64(r)?.into();
+        let signers_object_id = read_u64(r)?.into();
+        let protection_domain_object_id = read_u64(r)?.into();
         let reserved1 = read_u64(r)?;
         let reserved2 = read_u64(r)?;
         let instance_size = read_u32(r)?;
@@ -184,7 +187,7 @@ impl SubRecord {
         let mut instance_field_descriptors = Vec::new();
         for _ in 0..number_of_instance_fields {
             instance_field_descriptors.push(FieldDescriptor {
-                name_id: read_u64(r)?,
+                name_id: read_u64(r)?.into(),
                 typ: read_u8(r)?,
             });
         }
@@ -208,9 +211,9 @@ impl SubRecord {
     }
 
     fn instance_dump(r: &mut impl Read) -> Result<Self> {
-        let object_id = read_u64(r)?;
+        let object_id = read_u64(r)?.into();
         let stack_trace_serial_number = read_u32(r)?;
-        let class_object_id = read_u64(r)?;
+        let class_object_id = read_u64(r)?.into();
         let number_of_bytes = read_u32(r)?;
         let mut raw_field_bytes = vec![0; number_of_bytes as usize];
         r.read_exact(&mut raw_field_bytes)?;
@@ -225,13 +228,13 @@ impl SubRecord {
     }
 
     fn obj_array_dump(r: &mut impl Read) -> Result<Self> {
-        let object_id = read_u64(r)?;
+        let object_id = read_u64(r)?.into();
         let stack_trace_serial_number = read_u32(r)?;
         let number_of_elements = read_u32(r)?;
-        let array_class_id = read_u64(r)?;
+        let array_class_id = read_u64(r)?.into();
         let mut elements = Vec::new();
         for _ in 0..number_of_elements {
-            elements.push(read_u64(r)?);
+            elements.push(read_u64(r)?.into());
         }
 
         Ok(Self::ObjArrayDump {
@@ -243,7 +246,7 @@ impl SubRecord {
     }
 
     fn prim_array_dump(r: &mut impl Read) -> Result<Self> {
-        let object_id = read_u64(r)?;
+        let object_id = read_u64(r)?.into();
         let stack_trace_serial_number = read_u32(r)?;
         let number_of_elements = read_u32(r)?;
         let typ = read_u8(r)?;
@@ -275,7 +278,7 @@ impl SubRecord {
 
     fn thread_obj(r: &mut impl Read) -> Result<Self> {
         Ok(Self::ThreadObj {
-            object_id: read_u64(r)?,
+            object_id: read_u64(r)?.into(),
             sequence_number: read_u32(r)?,
             stack_trace_sequence_number: read_u32(r)?,
         })
@@ -283,7 +286,7 @@ impl SubRecord {
 
     fn java_frame(r: &mut impl Read) -> Result<Self> {
         Ok(Self::JavaFrame {
-            object_id: read_u64(r)?,
+            object_id: read_u64(r)?.into(),
             thread_serial_number: read_u32(r)?,
             frame_number: read_u32(r)?,
         })
@@ -291,7 +294,7 @@ impl SubRecord {
 
     fn jni_local(r: &mut impl Read) -> Result<Self> {
         Ok(Self::JniLocal {
-            object_id: read_u64(r)?,
+            object_id: read_u64(r)?.into(),
             thread_serial_number: read_u32(r)?,
             frame_number: read_u32(r)?,
         })
@@ -299,14 +302,14 @@ impl SubRecord {
 
     fn jni_global(r: &mut impl Read) -> Result<Self> {
         Ok(Self::JniGlobal {
-            object_id: read_u64(r)?,
-            global_ref_id: read_u64(r)?,
+            object_id: read_u64(r)?.into(),
+            global_ref_id: read_u64(r)?.into(),
         })
     }
 
     fn sticky_class(r: &mut impl Read) -> Result<Self> {
         Ok(Self::StickyClass {
-            object_id: read_u64(r)?,
+            object_id: read_u64(r)?.into(),
         })
     }
 }
