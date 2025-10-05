@@ -260,6 +260,18 @@ pub struct FieldDescriptor {
 }
 
 #[derive(Debug)]
+pub enum PrimArrayElement {
+    Bool(u8),
+    Byte(u8),
+    Char(u16),
+    Float(u32),
+    Double(u64),
+    Short(u16),
+    Int(u32),
+    Long(u64),
+}
+
+#[derive(Debug)]
 pub enum SubRecord {
     ClassDump {
         class_object_id: u64,
@@ -290,6 +302,12 @@ pub enum SubRecord {
         array_class_id: u64,
         elements: Vec<u64>,
     },
+    PrimArrayDump {
+        object_id: u64,
+        stack_trace_serial_number: u32,
+        typ: u8,
+        elements: Vec<PrimArrayElement>,
+    },
     HeapDumpEnd,
 }
 
@@ -298,7 +316,8 @@ impl Display for SubRecord {
         match self {
             SubRecord::ClassDump { .. } => write!(f, "ClassDump"),
             SubRecord::InstanceDump { .. } => write!(f, "InstanceDump"),
-            SubRecord::ObjArrayDump { .. } => write!(f, "ArrayDump"),
+            SubRecord::ObjArrayDump { .. } => write!(f, "ObjArrayDump"),
+            SubRecord::PrimArrayDump { .. } => write!(f, "PrimArrayDump"),
             SubRecord::HeapDumpEnd => write!(f, "HeapDumpEnd"),
         }
     }
@@ -312,6 +331,7 @@ impl SubRecord {
             0x20 => Self::class_dump(file),
             0x21 => Self::instance_dump(file),
             0x22 => Self::obj_array_dump(file),
+            0x23 => Self::prim_array_dump(file),
             _ => bail!("unknown sub record type: 0x{:x}", sub_record_type),
         }
     }
@@ -392,6 +412,37 @@ impl SubRecord {
             object_id,
             stack_trace_serial_number,
             array_class_id,
+            elements,
+        })
+    }
+
+    fn prim_array_dump(file: &mut File) -> Result<Self> {
+        let object_id = read_u64(file)?;
+        let stack_trace_serial_number = read_u32(file)?;
+        let number_of_elements = read_u32(file)?;
+        let typ = read_u8(file)?;
+
+        let mut elements = Vec::new();
+        for _ in 0..number_of_elements {
+            let element = match typ {
+                4 => PrimArrayElement::Bool(read_u8(file)?),
+                5 => PrimArrayElement::Char(read_u16(file)?),
+                6 => PrimArrayElement::Float(read_u32(file)?),
+                7 => PrimArrayElement::Double(read_u64(file)?),
+                8 => PrimArrayElement::Byte(read_u8(file)?),
+                9 => PrimArrayElement::Short(read_u16(file)?),
+                10 => PrimArrayElement::Int(read_u32(file)?),
+                11 => PrimArrayElement::Long(read_u64(file)?),
+                _ => bail!("invalid array type: {}", typ),
+            };
+
+            elements.push(element);
+        }
+
+        Ok(Self::PrimArrayDump {
+            object_id,
+            stack_trace_serial_number,
+            typ,
             elements,
         })
     }
