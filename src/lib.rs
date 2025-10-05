@@ -189,6 +189,14 @@ impl Record {
 #[derive(Debug)]
 pub enum FieldValue {
     NormalObject { object_id: u64 },
+    Boolean(u8),
+    Char(u16),
+    Float(u32),
+    Double(u64),
+    Byte(u8),
+    Short(u16),
+    Int(u32),
+    Long(u64),
 }
 
 #[derive(Debug)]
@@ -206,6 +214,14 @@ impl Field {
             0x02 => FieldValue::NormalObject {
                 object_id: read_u64(file)?,
             },
+            0x04 => FieldValue::Boolean(read_u8(file)?),
+            0x05 => FieldValue::Char(read_u16(file)?),
+            0x06 => FieldValue::Float(read_u32(file)?),
+            0x07 => FieldValue::Double(read_u64(file)?),
+            0x08 => FieldValue::Byte(read_u8(file)?),
+            0x09 => FieldValue::Short(read_u16(file)?),
+            0x0a => FieldValue::Int(read_u32(file)?),
+            0x0b => FieldValue::Long(read_u64(file)?),
             _ => bail!("invalid field type: 0x{:x}", typ),
         };
 
