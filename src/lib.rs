@@ -277,6 +277,13 @@ pub enum SubRecord {
         number_of_instance_fields: u16,
         instance_field_descriptors: Vec<FieldDescriptor>,
     },
+    InstanceDump {
+        object_id: u64,
+        stack_trace_serial_number: u32,
+        class_object_id: u64,
+        number_of_bytes: u32,
+        raw_field_bytes: Vec<u8>,
+    },
     HeapDumpEnd,
 }
 
@@ -284,6 +291,7 @@ impl Display for SubRecord {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SubRecord::ClassDump { .. } => write!(f, "ClassDump"),
+            SubRecord::InstanceDump { .. } => write!(f, "InstanceDump"),
             SubRecord::HeapDumpEnd => write!(f, "HeapDumpEnd"),
         }
     }
@@ -295,6 +303,7 @@ impl SubRecord {
 
         match sub_record_type {
             0x20 => Self::class_dump(file),
+            0x21 => Self::instance_dump(file),
             _ => bail!("unknown sub record type: 0x{:x}", sub_record_type),
         }
     }
@@ -341,6 +350,23 @@ impl SubRecord {
             static_fields,
             number_of_instance_fields,
             instance_field_descriptors,
+        })
+    }
+
+    fn instance_dump(file: &mut File) -> Result<Self> {
+        let object_id = read_u64(file)?;
+        let stack_trace_serial_number = read_u32(file)?;
+        let class_object_id = read_u64(file)?;
+        let number_of_bytes = read_u32(file)?;
+        let mut raw_field_bytes = vec![0; number_of_bytes as usize];
+        file.read_exact(&mut raw_field_bytes)?;
+
+        Ok(Self::InstanceDump {
+            object_id,
+            stack_trace_serial_number,
+            class_object_id,
+            number_of_bytes,
+            raw_field_bytes,
         })
     }
 }
