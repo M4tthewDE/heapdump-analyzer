@@ -1,6 +1,11 @@
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
-use std::{fs::File, io::Read, path::Path};
+use std::{
+    fmt::Display,
+    fs::File,
+    io::{Read, Seek},
+    path::Path,
+};
 
 #[derive(Debug)]
 pub enum Version {
@@ -44,6 +49,7 @@ pub fn parse(path: &Path) -> Result<Heap> {
     let mut records = Vec::new();
     loop {
         let record = Record::parse(&mut file)?;
+
         if matches!(record, Record::HeapDumpEnd) {
             records.push(record);
             break;
@@ -95,6 +101,19 @@ pub enum Record {
     HeapDumpEnd,
 }
 
+impl Display for Record {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Record::Utf8 { .. } => write!(f, "Utf8"),
+            Record::LoadClass { .. } => write!(f, "LoadClass"),
+            Record::Trace { .. } => write!(f, "Trace"),
+            Record::Frame { .. } => write!(f, "Frame"),
+            Record::HeapDumpSegment { .. } => write!(f, "HeapDumpSegment"),
+            Record::HeapDumpEnd => write!(f, "HeapDumpEnd"),
+        }
+    }
+}
+
 impl Record {
     fn parse(file: &mut File) -> Result<Record> {
         let tag = read_u8(file)?;
@@ -102,11 +121,11 @@ impl Record {
         let bytes_remaining = read_u32(file)? as usize;
 
         match tag {
-            0x01 => Ok(Self::utf8(file, micros, bytes_remaining)?),
-            0x02 => Ok(Self::load_class(file, micros)?),
-            0x04 => Ok(Self::frame(file, micros)?),
-            0x05 => Ok(Self::trace(file, micros)?),
-            0x1c => Ok(Self::heap_dump_segment(file, micros)?),
+            0x01 => Self::utf8(file, micros, bytes_remaining),
+            0x02 => Self::load_class(file, micros),
+            0x04 => Self::frame(file, micros),
+            0x05 => Self::trace(file, micros),
+            0x1c => Self::heap_dump_segment(file, micros, bytes_remaining),
             _ => Err(anyhow!("invalid tag: 0x{:x}", tag)),
         }
     }
@@ -168,7 +187,8 @@ impl Record {
         })
     }
 
-    fn heap_dump_segment(file: &mut File, micros: u32) -> Result<Self> {
+    fn heap_dump_segment(file: &mut File, micros: u32, bytes_remaining: usize) -> Result<Self> {
+        let start_position = file.stream_position()?;
         let mut sub_records = Vec::new();
         loop {
             let sub_record = SubRecord::new(file)?;
@@ -177,6 +197,10 @@ impl Record {
                 break;
             }
             sub_records.push(sub_record);
+
+            if file.stream_position()? - start_position == bytes_remaining as u64 {
+                break;
+            }
         }
 
         Ok(Self::HeapDumpSegment {
@@ -254,6 +278,15 @@ pub enum SubRecord {
         instance_field_descriptors: Vec<FieldDescriptor>,
     },
     HeapDumpEnd,
+}
+
+impl Display for SubRecord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SubRecord::ClassDump { .. } => write!(f, "ClassDump"),
+            SubRecord::HeapDumpEnd => write!(f, "HeapDumpEnd"),
+        }
+    }
 }
 
 impl SubRecord {
