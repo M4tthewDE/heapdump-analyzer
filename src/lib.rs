@@ -284,7 +284,7 @@ pub enum SubRecord {
         number_of_bytes: u32,
         raw_field_bytes: Vec<u8>,
     },
-    ArrayDump {
+    ObjArrayDump {
         object_id: u64,
         stack_trace_serial_number: u32,
         array_class_id: u64,
@@ -298,7 +298,7 @@ impl Display for SubRecord {
         match self {
             SubRecord::ClassDump { .. } => write!(f, "ClassDump"),
             SubRecord::InstanceDump { .. } => write!(f, "InstanceDump"),
-            SubRecord::ArrayDump { .. } => write!(f, "ArrayDump"),
+            SubRecord::ObjArrayDump { .. } => write!(f, "ArrayDump"),
             SubRecord::HeapDumpEnd => write!(f, "HeapDumpEnd"),
         }
     }
@@ -311,7 +311,7 @@ impl SubRecord {
         match sub_record_type {
             0x20 => Self::class_dump(file),
             0x21 => Self::instance_dump(file),
-            0x22 => Self::array_dump(file),
+            0x22 => Self::obj_array_dump(file),
             _ => bail!("unknown sub record type: 0x{:x}", sub_record_type),
         }
     }
@@ -378,7 +378,7 @@ impl SubRecord {
         })
     }
 
-    fn array_dump(file: &mut File) -> Result<Self> {
+    fn obj_array_dump(file: &mut File) -> Result<Self> {
         let object_id = read_u64(file)?;
         let stack_trace_serial_number = read_u32(file)?;
         let number_of_elements = read_u32(file)?;
@@ -388,7 +388,7 @@ impl SubRecord {
             elements.push(read_u64(file)?);
         }
 
-        Ok(Self::ArrayDump {
+        Ok(Self::ObjArrayDump {
             object_id,
             stack_trace_serial_number,
             array_class_id,
