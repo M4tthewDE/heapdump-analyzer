@@ -117,25 +117,25 @@ impl Display for Record {
 }
 
 impl Record {
-    fn parse(file: &mut File) -> Result<Record> {
-        let tag = read_u8(file)?;
-        let micros = read_u32(file)?;
-        let bytes_remaining = read_u32(file)? as usize;
+    fn parse(r: &mut (impl Read + Seek)) -> Result<Record> {
+        let tag = read_u8(r)?;
+        let micros = read_u32(r)?;
+        let bytes_remaining = read_u32(r)? as usize;
 
         match tag {
-            0x01 => Self::utf8(file, micros, bytes_remaining),
-            0x02 => Self::load_class(file, micros),
-            0x04 => Self::frame(file, micros),
-            0x05 => Self::trace(file, micros),
-            0x1c => Self::heap_dump_segment(file, micros, bytes_remaining),
+            0x01 => Self::utf8(r, micros, bytes_remaining),
+            0x02 => Self::load_class(r, micros),
+            0x04 => Self::frame(r, micros),
+            0x05 => Self::trace(r, micros),
+            0x1c => Self::heap_dump_segment(r, micros, bytes_remaining),
             0x2c => Ok(Self::HeapDumpEnd { micros }),
             _ => Err(anyhow!("invalid tag: 0x{:x}", tag)),
         }
     }
 
-    fn utf8(file: &mut File, micros: u32, bytes_remaining: usize) -> Result<Self> {
-        let id = read_u64(file)?;
-        let content = read_utf8(file, bytes_remaining - 8)?;
+    fn utf8(r: &mut impl Read, micros: u32, bytes_remaining: usize) -> Result<Self> {
+        let id = read_u64(r)?;
+        let content = read_utf8(r, bytes_remaining - 8)?;
         Ok(Self::Utf8 {
             micros,
             id,
@@ -143,24 +143,24 @@ impl Record {
         })
     }
 
-    fn load_class(file: &mut File, micros: u32) -> Result<Self> {
+    fn load_class(r: &mut impl Read, micros: u32) -> Result<Self> {
         Ok(Self::LoadClass {
             micros,
-            class_serial_number: read_u32(file)?,
-            class_object_id: read_u64(file)?,
-            stack_trace_serial_number: read_u32(file)?,
-            class_name_id: read_u64(file)?,
+            class_serial_number: read_u32(r)?,
+            class_object_id: read_u64(r)?,
+            stack_trace_serial_number: read_u32(r)?,
+            class_name_id: read_u64(r)?,
         })
     }
 
-    fn trace(file: &mut File, micros: u32) -> Result<Self> {
-        let stack_trace_serial_number = read_u32(file)?;
-        let thread_serial_number = read_u32(file)?;
-        let number_of_frames = read_u32(file)?;
+    fn trace(r: &mut impl Read, micros: u32) -> Result<Self> {
+        let stack_trace_serial_number = read_u32(r)?;
+        let thread_serial_number = read_u32(r)?;
+        let number_of_frames = read_u32(r)?;
 
         let mut stack_frame_ids = Vec::new();
         for _ in 0..number_of_frames {
-            stack_frame_ids.push(read_u64(file)?);
+            stack_frame_ids.push(read_u64(r)?);
         }
 
         Ok(Self::Trace {
@@ -171,13 +171,13 @@ impl Record {
         })
     }
 
-    fn frame(file: &mut File, micros: u32) -> Result<Self> {
-        let stack_frame_id = read_u64(file)?;
-        let method_name_id = read_u64(file)?;
-        let method_signature_id = read_u64(file)?;
-        let source_file_name_id = read_u64(file)?;
-        let class_serial_number = read_u32(file)?;
-        let line_number = read_i32(file)?;
+    fn frame(r: &mut impl Read, micros: u32) -> Result<Self> {
+        let stack_frame_id = read_u64(r)?;
+        let method_name_id = read_u64(r)?;
+        let method_signature_id = read_u64(r)?;
+        let source_file_name_id = read_u64(r)?;
+        let class_serial_number = read_u32(r)?;
+        let line_number = read_i32(r)?;
 
         Ok(Self::Frame {
             micros,
@@ -190,18 +190,22 @@ impl Record {
         })
     }
 
-    fn heap_dump_segment(file: &mut File, micros: u32, bytes_remaining: usize) -> Result<Self> {
-        let start_position = file.stream_position()?;
+    fn heap_dump_segment(
+        r: &mut (impl Read + Seek),
+        micros: u32,
+        bytes_remaining: usize,
+    ) -> Result<Self> {
+        let start_position = r.stream_position()?;
         let mut sub_records = Vec::new();
         loop {
-            let sub_record = SubRecord::new(file)?;
+            let sub_record = SubRecord::new(r)?;
             if matches!(sub_record, SubRecord::HeapDumpEnd) {
                 sub_records.push(sub_record);
                 break;
             }
             sub_records.push(sub_record);
 
-            if file.stream_position()? - start_position == bytes_remaining as u64 {
+            if r.stream_position()? - start_position == bytes_remaining as u64 {
                 break;
             }
         }
@@ -233,22 +237,22 @@ pub struct Field {
 }
 
 impl Field {
-    fn new(file: &mut File) -> Result<Self> {
-        let name_id = read_u64(file)?;
-        let typ = read_u8(file)?;
+    fn new(r: &mut impl Read) -> Result<Self> {
+        let name_id = read_u64(r)?;
+        let typ = read_u8(r)?;
 
         let value = match typ {
             0x02 => FieldValue::NormalObject {
-                object_id: read_u64(file)?,
+                object_id: read_u64(r)?,
             },
-            0x04 => FieldValue::Boolean(read_u8(file)?),
-            0x05 => FieldValue::Char(read_u16(file)?),
-            0x06 => FieldValue::Float(read_u32(file)?),
-            0x07 => FieldValue::Double(read_u64(file)?),
-            0x08 => FieldValue::Byte(read_u8(file)?),
-            0x09 => FieldValue::Short(read_u16(file)?),
-            0x0a => FieldValue::Int(read_u32(file)?),
-            0x0b => FieldValue::Long(read_u64(file)?),
+            0x04 => FieldValue::Boolean(read_u8(r)?),
+            0x05 => FieldValue::Char(read_u16(r)?),
+            0x06 => FieldValue::Float(read_u32(r)?),
+            0x07 => FieldValue::Double(read_u64(r)?),
+            0x08 => FieldValue::Byte(read_u8(r)?),
+            0x09 => FieldValue::Short(read_u16(r)?),
+            0x0a => FieldValue::Int(read_u32(r)?),
+            0x0b => FieldValue::Long(read_u64(r)?),
             _ => bail!("invalid field type: 0x{:x}", typ),
         };
 
@@ -354,47 +358,47 @@ impl Display for SubRecord {
 }
 
 impl SubRecord {
-    pub fn new(file: &mut File) -> Result<Self> {
-        let sub_record_type = read_u8(file)?;
+    pub fn new(r: &mut impl Read) -> Result<Self> {
+        let sub_record_type = read_u8(r)?;
 
         match sub_record_type {
-            0x01 => Self::jni_global(file),
-            0x02 => Self::jni_local(file),
-            0x03 => Self::java_frame(file),
-            0x05 => Self::sticky_class(file),
-            0x08 => Self::thread_obj(file),
-            0x20 => Self::class_dump(file),
-            0x21 => Self::instance_dump(file),
-            0x22 => Self::obj_array_dump(file),
-            0x23 => Self::prim_array_dump(file),
+            0x01 => Self::jni_global(r),
+            0x02 => Self::jni_local(r),
+            0x03 => Self::java_frame(r),
+            0x05 => Self::sticky_class(r),
+            0x08 => Self::thread_obj(r),
+            0x20 => Self::class_dump(r),
+            0x21 => Self::instance_dump(r),
+            0x22 => Self::obj_array_dump(r),
+            0x23 => Self::prim_array_dump(r),
             _ => bail!("unknown sub record type: 0x{:x}", sub_record_type),
         }
     }
 
-    fn class_dump(file: &mut File) -> Result<Self> {
-        let class_object_id = read_u64(file)?;
-        let stack_trace_serial_number = read_u32(file)?;
-        let super_class_object_id = read_u64(file)?;
-        let class_loader_object_id = read_u64(file)?;
-        let signers_object_id = read_u64(file)?;
-        let protection_domain_object_id = read_u64(file)?;
-        let reserved1 = read_u64(file)?;
-        let reserved2 = read_u64(file)?;
-        let instance_size = read_u32(file)?;
-        let constant_pool_size = read_u16(file)?;
+    fn class_dump(r: &mut impl Read) -> Result<Self> {
+        let class_object_id = read_u64(r)?;
+        let stack_trace_serial_number = read_u32(r)?;
+        let super_class_object_id = read_u64(r)?;
+        let class_loader_object_id = read_u64(r)?;
+        let signers_object_id = read_u64(r)?;
+        let protection_domain_object_id = read_u64(r)?;
+        let reserved1 = read_u64(r)?;
+        let reserved2 = read_u64(r)?;
+        let instance_size = read_u32(r)?;
+        let constant_pool_size = read_u16(r)?;
 
-        let number_of_static_fields = read_u16(file)?;
+        let number_of_static_fields = read_u16(r)?;
         let mut static_fields = Vec::new();
         for _ in 0..number_of_static_fields {
-            static_fields.push(Field::new(file)?);
+            static_fields.push(Field::new(r)?);
         }
 
-        let number_of_instance_fields = read_u16(file)?;
+        let number_of_instance_fields = read_u16(r)?;
         let mut instance_field_descriptors = Vec::new();
         for _ in 0..number_of_instance_fields {
             instance_field_descriptors.push(FieldDescriptor {
-                name_id: read_u64(file)?,
-                typ: read_u8(file)?,
+                name_id: read_u64(r)?,
+                typ: read_u8(r)?,
             });
         }
 
@@ -416,13 +420,13 @@ impl SubRecord {
         })
     }
 
-    fn instance_dump(file: &mut File) -> Result<Self> {
-        let object_id = read_u64(file)?;
-        let stack_trace_serial_number = read_u32(file)?;
-        let class_object_id = read_u64(file)?;
-        let number_of_bytes = read_u32(file)?;
+    fn instance_dump(r: &mut impl Read) -> Result<Self> {
+        let object_id = read_u64(r)?;
+        let stack_trace_serial_number = read_u32(r)?;
+        let class_object_id = read_u64(r)?;
+        let number_of_bytes = read_u32(r)?;
         let mut raw_field_bytes = vec![0; number_of_bytes as usize];
-        file.read_exact(&mut raw_field_bytes)?;
+        r.read_exact(&mut raw_field_bytes)?;
 
         Ok(Self::InstanceDump {
             object_id,
@@ -433,14 +437,14 @@ impl SubRecord {
         })
     }
 
-    fn obj_array_dump(file: &mut File) -> Result<Self> {
-        let object_id = read_u64(file)?;
-        let stack_trace_serial_number = read_u32(file)?;
-        let number_of_elements = read_u32(file)?;
-        let array_class_id = read_u64(file)?;
+    fn obj_array_dump(r: &mut impl Read) -> Result<Self> {
+        let object_id = read_u64(r)?;
+        let stack_trace_serial_number = read_u32(r)?;
+        let number_of_elements = read_u32(r)?;
+        let array_class_id = read_u64(r)?;
         let mut elements = Vec::new();
         for _ in 0..number_of_elements {
-            elements.push(read_u64(file)?);
+            elements.push(read_u64(r)?);
         }
 
         Ok(Self::ObjArrayDump {
@@ -451,23 +455,23 @@ impl SubRecord {
         })
     }
 
-    fn prim_array_dump(file: &mut File) -> Result<Self> {
-        let object_id = read_u64(file)?;
-        let stack_trace_serial_number = read_u32(file)?;
-        let number_of_elements = read_u32(file)?;
-        let typ = read_u8(file)?;
+    fn prim_array_dump(r: &mut impl Read) -> Result<Self> {
+        let object_id = read_u64(r)?;
+        let stack_trace_serial_number = read_u32(r)?;
+        let number_of_elements = read_u32(r)?;
+        let typ = read_u8(r)?;
 
         let mut elements = Vec::new();
         for _ in 0..number_of_elements {
             let element = match typ {
-                4 => PrimArrayElement::Bool(read_u8(file)?),
-                5 => PrimArrayElement::Char(read_u16(file)?),
-                6 => PrimArrayElement::Float(read_u32(file)?),
-                7 => PrimArrayElement::Double(read_u64(file)?),
-                8 => PrimArrayElement::Byte(read_u8(file)?),
-                9 => PrimArrayElement::Short(read_u16(file)?),
-                10 => PrimArrayElement::Int(read_u32(file)?),
-                11 => PrimArrayElement::Long(read_u64(file)?),
+                4 => PrimArrayElement::Bool(read_u8(r)?),
+                5 => PrimArrayElement::Char(read_u16(r)?),
+                6 => PrimArrayElement::Float(read_u32(r)?),
+                7 => PrimArrayElement::Double(read_u64(r)?),
+                8 => PrimArrayElement::Byte(read_u8(r)?),
+                9 => PrimArrayElement::Short(read_u16(r)?),
+                10 => PrimArrayElement::Int(read_u32(r)?),
+                11 => PrimArrayElement::Long(read_u64(r)?),
                 _ => bail!("invalid array type: {}", typ),
             };
 
@@ -482,40 +486,40 @@ impl SubRecord {
         })
     }
 
-    fn thread_obj(file: &mut File) -> Result<Self> {
+    fn thread_obj(r: &mut impl Read) -> Result<Self> {
         Ok(Self::ThreadObj {
-            object_id: read_u64(file)?,
-            sequence_number: read_u32(file)?,
-            stack_trace_sequence_number: read_u32(file)?,
+            object_id: read_u64(r)?,
+            sequence_number: read_u32(r)?,
+            stack_trace_sequence_number: read_u32(r)?,
         })
     }
 
-    fn java_frame(file: &mut File) -> Result<Self> {
+    fn java_frame(r: &mut impl Read) -> Result<Self> {
         Ok(Self::JavaFrame {
-            object_id: read_u64(file)?,
-            thread_serial_number: read_u32(file)?,
-            frame_number: read_u32(file)?,
+            object_id: read_u64(r)?,
+            thread_serial_number: read_u32(r)?,
+            frame_number: read_u32(r)?,
         })
     }
 
-    fn jni_local(file: &mut File) -> Result<Self> {
+    fn jni_local(r: &mut impl Read) -> Result<Self> {
         Ok(Self::JniLocal {
-            object_id: read_u64(file)?,
-            thread_serial_number: read_u32(file)?,
-            frame_number: read_u32(file)?,
+            object_id: read_u64(r)?,
+            thread_serial_number: read_u32(r)?,
+            frame_number: read_u32(r)?,
         })
     }
 
-    fn jni_global(file: &mut File) -> Result<Self> {
+    fn jni_global(r: &mut impl Read) -> Result<Self> {
         Ok(Self::JniGlobal {
-            object_id: read_u64(file)?,
-            global_ref_id: read_u64(file)?,
+            object_id: read_u64(r)?,
+            global_ref_id: read_u64(r)?,
         })
     }
 
-    fn sticky_class(file: &mut File) -> Result<Self> {
+    fn sticky_class(r: &mut impl Read) -> Result<Self> {
         Ok(Self::StickyClass {
-            object_id: read_u64(file)?,
+            object_id: read_u64(r)?,
         })
     }
 }
