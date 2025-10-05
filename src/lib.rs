@@ -327,6 +327,9 @@ pub enum SubRecord {
         object_id: u64,
         global_ref_id: u64,
     },
+    StickyClass {
+        object_id: u64,
+    },
     HeapDumpEnd,
 }
 
@@ -341,6 +344,7 @@ impl Display for SubRecord {
             SubRecord::JavaFrame { .. } => write!(f, "JavaFrame"),
             SubRecord::JniLocal { .. } => write!(f, "JniLocal"),
             SubRecord::JniGlobal { .. } => write!(f, "JniGlobal"),
+            SubRecord::StickyClass { .. } => write!(f, "StickyClass"),
             SubRecord::HeapDumpEnd => write!(f, "HeapDumpEnd"),
         }
     }
@@ -354,6 +358,7 @@ impl SubRecord {
             0x01 => Self::jni_global(file),
             0x02 => Self::jni_local(file),
             0x03 => Self::java_frame(file),
+            0x05 => Self::sticky_class(file),
             0x08 => Self::thread_obj(file),
             0x20 => Self::class_dump(file),
             0x21 => Self::instance_dump(file),
@@ -502,6 +507,12 @@ impl SubRecord {
         Ok(Self::JniGlobal {
             object_id: read_u64(file)?,
             global_ref_id: read_u64(file)?,
+        })
+    }
+
+    fn sticky_class(file: &mut File) -> Result<Self> {
+        Ok(Self::StickyClass {
+            object_id: read_u64(file)?,
         })
     }
 }
