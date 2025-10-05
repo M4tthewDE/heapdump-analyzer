@@ -11,7 +11,7 @@ use crate::parser::{
     util::{read_i32, read_u8, read_u32, read_u64, read_utf8},
 };
 
-mod sub_record;
+pub mod sub_record;
 mod util;
 
 #[derive(Debug)]
@@ -75,7 +75,7 @@ impl ParsedHeap {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
 pub struct Id(pub u64);
 
 impl From<u64> for Id {

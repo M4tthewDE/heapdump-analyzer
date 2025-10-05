@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use heapdump_analyzer::{analzyer::AnalyzedHeap, parser::ParsedHeap};
 use std::path::PathBuf;
+use tracing::info;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() -> Result<()> {
@@ -15,7 +16,9 @@ fn main() -> Result<()> {
     let path = PathBuf::from(path_arg);
 
     let parsed_heap = ParsedHeap::parse(&path)?;
-    let _analyzed_heap = AnalyzedHeap::analyze(&parsed_heap)?;
+    let analyzed_heap = AnalyzedHeap::analyze(&parsed_heap)?;
+
+    info!("{}", analyzed_heap.instances.len());
 
     Ok(())
 }
