@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use heapdump_analyzer::parser::ParsedHeap;
 use std::path::PathBuf;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -13,7 +14,7 @@ fn main() -> Result<()> {
         .context("no heapdump path provided")?;
     let path = PathBuf::from(path_arg);
 
-    let _heap = heapdump_analyzer::parse(&path)?;
+    let _parsed_heap = ParsedHeap::parse(&path)?;
 
     Ok(())
 }
