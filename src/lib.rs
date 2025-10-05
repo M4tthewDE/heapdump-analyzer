@@ -313,6 +313,11 @@ pub enum SubRecord {
         sequence_number: u32,
         stack_trace_sequence_number: u32,
     },
+    JavaFrame {
+        object_id: u64,
+        thread_serial_number: u32,
+        frame_number: u32,
+    },
     HeapDumpEnd,
 }
 
@@ -324,6 +329,7 @@ impl Display for SubRecord {
             SubRecord::ObjArrayDump { .. } => write!(f, "ObjArrayDump"),
             SubRecord::PrimArrayDump { .. } => write!(f, "PrimArrayDump"),
             SubRecord::ThreadObj { .. } => write!(f, "ThreadObj"),
+            SubRecord::JavaFrame { .. } => write!(f, "JavaFrame"),
             SubRecord::HeapDumpEnd => write!(f, "HeapDumpEnd"),
         }
     }
@@ -334,6 +340,7 @@ impl SubRecord {
         let sub_record_type = read_u8(file)?;
 
         match sub_record_type {
+            0x03 => Self::java_frame(file),
             0x08 => Self::thread_obj(file),
             0x20 => Self::class_dump(file),
             0x21 => Self::instance_dump(file),
@@ -459,6 +466,14 @@ impl SubRecord {
             object_id: read_u64(file)?,
             sequence_number: read_u32(file)?,
             stack_trace_sequence_number: read_u32(file)?,
+        })
+    }
+
+    fn java_frame(file: &mut File) -> Result<Self> {
+        Ok(Self::JavaFrame {
+            object_id: read_u64(file)?,
+            thread_serial_number: read_u32(file)?,
+            frame_number: read_u32(file)?,
         })
     }
 }
