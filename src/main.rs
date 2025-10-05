@@ -12,7 +12,8 @@ fn main() -> Result<()> {
         .nth(1)
         .context("no heapdump path provided")?;
     let path = PathBuf::from(path_arg);
-    let heap = heapdump_analyzer::parse(&path)?;
-    dbg!(heap);
+
+    let _heap = heapdump_analyzer::parse(&path)?;
+
     Ok(())
 }

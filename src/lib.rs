@@ -50,7 +50,7 @@ pub fn parse(path: &Path) -> Result<Heap> {
     loop {
         let record = Record::parse(&mut file)?;
 
-        if matches!(record, Record::HeapDumpEnd) {
+        if matches!(record, Record::HeapDumpEnd { .. }) {
             records.push(record);
             break;
         }
@@ -98,7 +98,9 @@ pub enum Record {
         micros: u32,
         sub_records: Vec<SubRecord>,
     },
-    HeapDumpEnd,
+    HeapDumpEnd {
+        micros: u32,
+    },
 }
 
 impl Display for Record {
@@ -109,7 +111,7 @@ impl Display for Record {
             Record::Trace { .. } => write!(f, "Trace"),
             Record::Frame { .. } => write!(f, "Frame"),
             Record::HeapDumpSegment { .. } => write!(f, "HeapDumpSegment"),
-            Record::HeapDumpEnd => write!(f, "HeapDumpEnd"),
+            Record::HeapDumpEnd { .. } => write!(f, "HeapDumpEnd"),
         }
     }
 }
@@ -126,6 +128,7 @@ impl Record {
             0x04 => Self::frame(file, micros),
             0x05 => Self::trace(file, micros),
             0x1c => Self::heap_dump_segment(file, micros, bytes_remaining),
+            0x2c => Ok(Self::HeapDumpEnd { micros }),
             _ => Err(anyhow!("invalid tag: 0x{:x}", tag)),
         }
     }
